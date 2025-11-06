@@ -131,6 +131,39 @@ function twsc_render_dashboard_page() {
 			This dashboard provides an at-a-glance overview of your entire Theatre West plugin suite.
 		</p>
 
+		<h2>Settings</h2>
+
+		<form method="post" action="options.php">
+			<?php
+				// This prints out all hidden setting fields, nonces, etc.
+				settings_fields( 'twsc_settings_group' );
+
+				// Get our saved options, with a default.
+				$options = get_option( 'twsc_settings', [ 'log_level' => 'info' ] );
+				$current_level = $options['log_level'];
+			?>
+			<table class="form-table" role="presentation">
+				<tbody>
+					<tr>
+						<th scope="row"><label for="twsc_log_level">Logging Level</label></th>
+						<td>
+							<select name="twsc_settings[log_level]" id="twsc_log_level">
+								<option value="debug" <?php selected( 'debug', $current_level ); ?>>Full Debug (Logs Everything)</option>
+								<option value="info" <?php selected( 'info', $current_level ); ?>>Standard (Info, Warnings & Errors)</option>
+								<option value="warning" <?php selected( 'warning', $current_level ); ?>>Warnings & Errors Only</option>
+								<option value="error" <?php selected( 'error', $current_level ); ?>>Errors Only</option>
+							</select>
+							<p class="description">
+								Select the minimum severity level to record in the log. Lower levels are more verbose.
+							</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<?php submit_button( 'Save Settings' ); ?>
+		</form>
+		<hr />
+		<h2>Suite Status</h2>
 		<div class="twsc-status-table-container">
 			<table class="wp-list-table widefat striped">
 				<thead>
