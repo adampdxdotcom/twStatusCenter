@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       TW Status Center
  * Description:       Provides a central dashboard to monitor the status and metrics of all Theatre West (TW) plugins.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Author:            Adam Michaels
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // == Constants
 // =========================================================================
 define( 'TWSC_PATH', plugin_dir_path( __FILE__ ) );
-define( 'TWSC_VERSION', '1.0.0' );
+define( 'TWSC_VERSION', '1.1.0' );
 
 // Define the name of our custom log table in a constant for easy access.
 global $wpdb;
@@ -53,30 +53,58 @@ function twsc_activate() {
 
 	// dbDelta is the WordPress function for creating/updating tables.
 	dbDelta( $sql );
+
+    // Add a default option for the logging level on first activation.
+    if ( false === get_option( 'twsc_settings' ) ) {
+        add_option( 'twsc_settings', [ 'log_level' => 'info' ] );
+    }
 }
 register_activation_hook( __FILE__, 'twsc_activate' );
 
 
 // =========================================================================
-// == Global Logging Function
+// == Global Logging Function (UPGRADED)
 // =========================================================================
 
 if ( ! function_exists( 'tw_suite_log' ) ) {
 	/**
 	 * A globally available function to log events from any TW plugin.
 	 *
-	 * This function is the central entry point for the logging system. Other plugins
-	 * will check if this function exists before calling it.
+	 * This function now checks the user-defined verbosity level before
+	 * saving a log to the database.
 	 *
 	 * @param string $source  The name of the plugin or component logging the event (e.g., 'TW Forms').
 	 * @param string $message The message to log. Can be a string, array, or object.
-	 * @param string $level   The log level (e.g., 'INFO', 'WARNING', 'ERROR'). Defaults to 'INFO'.
+	 * @param string $level   The log level (e.g., 'INFO', 'WARNING', 'ERROR', 'DEBUG'). Defaults to 'INFO'.
 	 */
 	function tw_suite_log( $source, $message, $level = 'INFO' ) {
 		global $wpdb;
 
+        // --- START: New Filtering Logic ---
+
+        $options = get_option( 'twsc_settings', [ 'log_level' => 'info' ] );
+        $min_log_level_setting = $options['log_level'];
+
+        // Define the hierarchy of log levels. Higher number is more severe.
+        $level_hierarchy = [
+            'DEBUG'   => 0,
+            'INFO'    => 1,
+            'WARNING' => 2,
+            'ERROR'   => 3,
+        ];
+
+        $incoming_level_value = $level_hierarchy[ strtoupper( $level ) ] ?? 1; // Default to INFO if unknown
+        $setting_level_value = $level_hierarchy[ strtoupper( $min_log_level_setting ) ] ?? 1;
+
+        // If the incoming log's severity is less than the minimum setting, stop and do nothing.
+        if ( $incoming_level_value < $setting_level_value ) {
+            return;
+        }
+
+        // --- END: New Filtering Logic ---
+
 		// If the message is an array or object, format it for readability.
-		if ( is_array( $message ) || is_object( 'message' ) ) {
+		if ( is_array( $message ) || is_object( $message ) ) {
 			$message = print_r( $message, true );
 		}
 
@@ -96,6 +124,45 @@ if ( ! function_exists( 'tw_suite_log' ) ) {
 			)
 		);
 	}
+}
+
+
+// =========================================================================
+// == Settings API Registration (NEW)
+// =========================================================================
+
+if ( ! function_exists( 'twsc_register_settings' ) ) {
+    /**
+     * Registers the plugin's settings with WordPress.
+     */
+    function twsc_register_settings() {
+        register_setting(
+            'twsc_settings_group',          // A unique name for the settings group
+            'twsc_settings',                // The name of the option to be stored in the wp_options table
+            'twsc_sanitize_settings'        // A callback function to sanitize the input
+        );
+    }
+    add_action( 'admin_init', 'twsc_register_settings' );
+
+    /**
+     * Sanitizes the settings input before saving to the database.
+     *
+     * @param array $input The raw input from the settings form.
+     * @return array The sanitized input.
+     */
+    function twsc_sanitize_settings( $input ) {
+        $sanitized_input = [];
+        $allowed_levels = [ 'debug', 'info', 'warning', 'error' ];
+
+        if ( isset( $input['log_level'] ) && in_array( $input['log_level'], $allowed_levels, true ) ) {
+            $sanitized_input['log_level'] = $input['log_level'];
+        } else {
+            // Default to 'info' if an invalid value is submitted.
+            $sanitized_input['log_level'] = 'info';
+        }
+
+        return $sanitized_input;
+    }
 }
 
 
